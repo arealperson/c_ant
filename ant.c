@@ -18,6 +18,8 @@
 #define MAX_ANT_NUM		10
 #define ANT_INIT_X		10
 #define ANT_INIT_Y		10
+#define ANT2_INIT_X		0
+#define ANT2_INIT_Y		0
 #define ANT_DEFAULT_FORCE	10
 #define MAX_PHEROMONE_FORCE	10
 #define ANT_ASCII		'*'
@@ -81,13 +83,14 @@ int main(void)
 	ant_init();
 
 	ant_init_ant(0, ANT_INIT_X, ANT_INIT_Y, ANT_DEFAULT_FORCE);
+	ant_init_ant(1, ANT2_INIT_X, ANT2_INIT_Y, ANT_DEFAULT_FORCE);
 
 	field_show();
 	printf("\n> ");
 	scanf("%s", command);
 
 	while (1) {
-		field_do_1turn(1);
+		field_do_1turn(2);
 		field_show();
 #if DEBUG == 1
 		printf("[DEBUG] ant pheromone map\n");
