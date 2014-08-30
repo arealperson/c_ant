@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <time.h>
 
+#define DEBUG				0
+
 #define EXE_STATUS_ERROR	-1
 
 #define MAX_COMMAND_STR	16
@@ -53,25 +55,32 @@ unsigned char field_loc_dir_to_northern_loc_dir(unsigned char dir, unsigned char
 void field_show();
 void field_move(unsigned int old_x, unsigned int old_y, unsigned int next_x, unsigned int next_y);
 
-void ant_init(unsigned int ant_id, unsigned int x, unsigned int y, char force);
+void ant_init();
+void ant_init_ant(unsigned int ant_id, unsigned int x, unsigned int y, char force);
 void ant_work_1turn(unsigned int ant_id);
 void ant_get_next_dir(unsigned int ant_id);
 void ant_walk(unsigned int ant_id);
-unsigned char ant_is_pheromone(char field_status);
+unsigned char ant_is_other_pheromone(unsigned int ant_id, char field_status, unsigned int x, unsigned int y);
 unsigned char ant_loc_dir_to_dir(unsigned int ant_id, unsigned char loc_dir);
+void ant_show_pheromone_map();
 
 unsigned int field_map_width;
 unsigned int field_map_height;
 char field_map[MAX_MAP_HEIGHT][MAX_MAP_WIDTH] = {{ 0 }};
+unsigned int field_ref_x;
+unsigned int field_ref_y;
 
 struct ant_status ant[MAX_ANT_NUM];
+int ant_pheromone_map[MAX_MAP_HEIGHT][MAX_MAP_WIDTH];
 
 int main(void)
 {
 	char command[MAX_COMMAND_STR];
 
 	field_init(MAX_MAP_WIDTH, MAX_MAP_HEIGHT);
-	ant_init(0, ANT_INIT_X, ANT_INIT_Y, ANT_DEFAULT_FORCE);
+	ant_init();
+
+	ant_init_ant(0, ANT_INIT_X, ANT_INIT_Y, ANT_DEFAULT_FORCE);
 
 	field_show();
 	printf("\n> ");
@@ -80,6 +89,10 @@ int main(void)
 	while (1) {
 		field_do_1turn(1);
 		field_show();
+#if DEBUG == 1
+		printf("[DEBUG] ant pheromone map\n");
+		ant_show_pheromone_map();
+#endif
 
 		printf("\n> ");
 		scanf("%s", command);
@@ -135,25 +148,33 @@ char field_get_neighbor_status(unsigned int x, unsigned int y, unsigned char dir
 	switch (northern_loc_dir) {
 	case FRONT:
 		if (y > 0) {
-			field_status = field_get(x, y - 1);
+			field_ref_x = x;
+			field_ref_y = y - 1;
+			field_status = field_get(field_ref_x, field_ref_y);
 		}
 		break;
 
 	case BACK:
 		if (y < field_map_height - 1) {
-			field_status = field_get(x, y + 1);
+			field_ref_x = x;
+			field_ref_y = y + 1;
+			field_status = field_get(field_ref_x, field_ref_y);
 		}
 		break;
 
 	case LEFT:
 		if (x > 0) {
-			field_status = field_get(x - 1, y);
+			field_ref_x = x - 1;
+			field_ref_y = y;
+			field_status = field_get(field_ref_x, field_ref_y);
 		}
 		break;
 
 	case RIGHT:
 		if (x < field_map_width - 1) {
-			field_status = field_get(x + 1, y);
+			field_ref_x = x + 1;
+			field_ref_y = y;
+			field_status = field_get(field_ref_x, field_ref_y);
 		}
 		break;
 	}
@@ -255,7 +276,18 @@ void field_move(unsigned int old_x, unsigned int old_y, unsigned int next_x, uns
 	field_map[old_y][old_x] = 0;
 }
 
-void ant_init(unsigned int ant_id, unsigned int x, unsigned int y, char force)
+void ant_init()
+{
+	unsigned int i, j;
+
+	for (i = 0; i < MAX_MAP_HEIGHT; i++) {
+		for (j = 0; j < MAX_MAP_WIDTH; j++) {
+			ant_pheromone_map[i][j] = -1;
+		}
+	}
+}
+
+void ant_init_ant(unsigned int ant_id, unsigned int x, unsigned int y, char force)
 {
 	ant[ant_id].now_x = x;
 	ant[ant_id].now_y = y;
@@ -277,22 +309,25 @@ void ant_get_next_dir(unsigned int ant_id)
 	char found_loc_dir;
 
 	field_status = field_get_neighbor_status(ant[ant_id].now_x, ant[ant_id].now_y, ant[ant_id].now_dir, RIGHT);
-	if (ant_is_pheromone(field_status) == 1) {
+	if (ant_is_other_pheromone(ant_id, field_status, field_ref_x, field_ref_y) == 1) {
 		found_pheromone = field_status;
 		found_loc_dir = RIGHT;
 	}
 	field_status = field_get_neighbor_status(ant[ant_id].now_x, ant[ant_id].now_y, ant[ant_id].now_dir, FRONT);
-	if ((ant_is_pheromone(field_status) == 1) && (found_pheromone < field_status)) {
+	if ((ant_is_other_pheromone(ant_id, field_status, field_ref_x, field_ref_y) == 1) && (found_pheromone < field_status)) {
 		found_pheromone = field_status;
 		found_loc_dir = FRONT;
 	}
 	field_status = field_get_neighbor_status(ant[ant_id].now_x, ant[ant_id].now_y, ant[ant_id].now_dir, LEFT);
-	if ((ant_is_pheromone(field_status) == 1) && (found_pheromone < field_status)) {
+	if ((ant_is_other_pheromone(ant_id, field_status, field_ref_x, field_ref_y) == 1) && (found_pheromone < field_status)) {
 		found_pheromone = field_status;
 		found_loc_dir = LEFT;
 	}
 
 	if (found_pheromone <= 0) {
+#if DEBUG == 1
+		printf("[DEBUG] ant is random walk.\n");
+#endif
 		while (1) {
 			found_loc_dir = (unsigned char)((rand() / ((double)RAND_MAX + 1.0)) * (MAX_LOCAL_DIRECTIONS - 1));
 			field_status = field_get_neighbor_status(ant[ant_id].now_x, ant[ant_id].now_y, ant[ant_id].now_dir, found_loc_dir);
@@ -326,12 +361,21 @@ void ant_walk(unsigned int ant_id)
 	}
 	field_move(old_x, old_y, ant[ant_id].now_x, ant[ant_id].now_y);
 	field_put(old_x, old_y, ant[ant_id].pheromone_force);
+	ant_pheromone_map[old_y][old_x] = ant_id;
 }
 
-unsigned char ant_is_pheromone(char field_status)
+unsigned char ant_is_other_pheromone(unsigned int ant_id, char field_status, unsigned int x, unsigned int y)
 {
 	if ((0 < field_status) && (field_status <= MAX_PHEROMONE_FORCE)) {
-		return 1;
+#if DEBUG == 1
+		printf("[DEBUG] is_pheromone\n");
+#endif
+		if (ant_pheromone_map[y][x] != (int)ant_id) {
+#if DEBUG == 1
+			printf("[DEBUG] is_own_pheromone\n");
+#endif
+			return 1;
+		}
 	}
 	return 0;
 }
@@ -411,4 +455,23 @@ unsigned char ant_loc_dir_to_dir(unsigned int ant_id, unsigned char loc_dir)
 	}
 
 	return dir;
+}
+
+void ant_show_pheromone_map()
+{
+	unsigned int i, j;
+
+	for (i = 0; i < MAX_MAP_HEIGHT; i++) {
+		for (j = 0; j < MAX_MAP_WIDTH; j++) {
+			switch (ant_pheromone_map[i][j]) {
+			case -1:
+				printf("   ");
+				break;
+			default:
+				printf("%02d ", ant_pheromone_map[i][j]);
+				break;
+			}
+		}
+		putchar('\n');
+	}
 }
